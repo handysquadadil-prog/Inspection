@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Handy sQuad – Home Inspection Suite</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+  <!-- Property Layout Setup Landing Screen -->
+  <div class="setup-landing-screen" id="setup-landing-screen">
+    <div class="setup-card">
+      <div class="setup-header">
+        <div class="logo-icon">H</div>
+        <div class="setup-title-block">
+          <h2>Handy sQuad</h2>
+          <p>Property Layout & Room Configuration</p>
+        </div>
+      </div>
+      
+      <div class="setup-body">
+        <div class="form-group">
+          <label for="input-property-address">🏢 House / Property Address</label>
+          <input type="text" id="input-property-address" placeholder="Enter full address (e.g. Skyview Towers, Unit 502)" value="Skyview Towers, Unit 502">
+        </div>
+        
+        <div class="form-group" style="margin-top: 20px;">
+          <label>🗺️ Select Rooms to Include in Inspection Layout</label>
+          <div class="rooms-setup-grid" id="rooms-setup-grid">
+            <label class="room-checkbox-card selected">
+              <input type="checkbox" value="Living Room / Hall" checked onchange="toggleCheckboxCardHighlight(this)">
+              <span>🛋️ Living Room / Hall</span>
+            </label>
+            <label class="room-checkbox-card selected">
+              <input type="checkbox" value="Kitchen" checked onchange="toggleCheckboxCardHighlight(this)">
+              <span>🍳 Kitchen</span>
+            </label>
+            <label class="room-checkbox-card selected">
+              <input type="checkbox" value="Master Bedroom" checked onchange="toggleCheckboxCardHighlight(this)">
+              <span>🛏️ Master Bedroom</span>
+            </label>
+            <label class="room-checkbox-card">
+              <input type="checkbox" value="Kids Bedroom" onchange="toggleCheckboxCardHighlight(this)">
+              <span>🧸 Kids Bedroom</span>
+            </label>
+            <label class="room-checkbox-card selected">
+              <input type="checkbox" value="Guest Bathroom" checked onchange="toggleCheckboxCardHighlight(this)">
+              <span>🚿 Guest Bathroom</span>
+            </label>
+            <label class="room-checkbox-card selected">
+              <input type="checkbox" value="Master Bathroom" checked onchange="toggleCheckboxCardHighlight(this)">
+              <span>🛁 Master Bathroom</span>
+            </label>
+            <label class="room-checkbox-card selected">
+              <input type="checkbox" value="Balcony" checked onchange="toggleCheckboxCardHighlight(this)">
+              <span>🌅 Balcony</span>
+            </label>
+            <label class="room-checkbox-card">
+              <input type="checkbox" value="Pooja Room" onchange="toggleCheckboxCardHighlight(this)">
+              <span>🙏 Pooja Room</span>
+            </label>
+            <label class="room-checkbox-card">
+              <input type="checkbox" value="Utility Area" onchange="toggleCheckboxCardHighlight(this)">
+              <span>🧺 Utility Area</span>
+            </label>
+          </div>
+        </div>
+        
+        <div class="form-group custom-room-row" style="margin-top: 15px; display: flex; gap: 10px;">
+          <input type="text" id="input-custom-room" placeholder="Enter custom room name (e.g. Study Room)" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--bg-border);">
+          <button class="btn btn-secondary" type="button" onclick="addCustomRoomOption()" style="padding: 10px 16px; font-size: 0.8rem; height: auto;">
+            ➕ Add Custom Room
+          </button>
+        </div>
+      </div>
+      
+      <div class="setup-footer" style="margin-top: 25px;">
+        <button class="btn btn-primary" id="btn-start-inspection" onclick="startInspectionWalkthrough()" style="width: 100%; padding: 14px; font-size: 0.95rem; border-radius: 12px; font-weight: bold; background-color: var(--bg-header-navy); box-shadow: var(--shadow-md);">
+          🚀 Start Inspection Walkthrough
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screen UI App Container (Hidden by default until layout setup complete) -->
+  <div class="app-container" id="main-app-container" style="display: none;">
+    
+    <!-- Mobile Sidebar Backdrop overlay -->
+    <div class="sidebar-overlay" id="mobile-sidebar-overlay"></div>
+    
+    <!-- Left Category Navigation Sidebar -->
+    <aside class="app-sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon">H</div>
+        <div class="logo-text">
+          <h1>Handy sQuad</h1>
+          <p>Inspection Hub</p>
+        </div>
+      </div>
+      
+      <!-- Categories Toggle Sidebar List -->
+      <div class="room-list-container">
+        <div class="room-list-title">Inspection Categories</div>
+        <div id="category-sidebar-list">
+          <!-- Category selector buttons loaded dynamically via app.js -->
+        </div>
+      </div>
+      
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <button class="btn btn-secondary btn-outline" id="btn-config-setup" style="width: 100%;">
+          ⚙️ Setup Property Config
+        </button>
+      </div>
+    </aside>
+    
+    <!-- Right Main Content Workbench -->
+    <main class="app-main">
+      
+      <!-- Top Navy Banner Header -->
+      <header class="navy-banner">
+        <div class="back-btn-row">
+          <!-- Hamburger menu button to toggle Categories Sidebar on Mobile -->
+          <button class="menu-btn" id="mobile-menu-toggle" style="background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.15); color: #ffffff; margin-right: 10px;">
+            ☰ Categories
+          </button>
+          
+          <button class="back-btn" onclick="location.reload()">
+            ← Inspection
+          </button>
+          
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div class="timer-widget" id="timer-widget" style="padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.15); color: #ffffff;">
+              ⏳ <span id="timer-clock">45:00</span>
+            </div>
+            <button class="back-btn" id="btn-layout-trigger" onclick="showSetupScreen()">
+              🗺️ Edit Layout
+            </button>
+            <button class="back-btn" id="btn-setup-trigger">
+              ⚙️ Config Setup
+            </button>
+          </div>
+        </div>
+        
+        <!-- Banner Content details -->
+        <div class="banner-content">
+          <div class="banner-left">
+            <!-- Active Room Title loaded dynamically -->
+            <h1 id="banner-active-title">Living Room / Hall</h1>
+            <div class="banner-subtitle" id="banner-sections-count">
+              9 sections · 0 issues flagged
+            </div>
+          </div>
+          
+          <!-- Circular Progress Ring (Screenshot style) -->
+          <div class="circular-progress-wrapper">
+            <svg class="circular-progress-svg">
+              <circle class="circular-progress-bg" cx="30" cy="30" r="28" />
+              <circle class="circular-progress-bar" id="progress-ring-circle" cx="30" cy="30" r="28" />
+            </svg>
+            <div class="circular-progress-text" id="progress-ring-percentage">0%</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Inspection Mode Toggle Segment Bar (Field, Express, Audit) -->
+      <div class="mode-selector-bar">
+        <div class="mode-segment-control">
+          <button class="mode-segment-btn active" id="mode-btn-field" onclick="setInspectionMode('field')">
+            👣 Field Walkpath
+          </button>
+          <button class="mode-segment-btn" id="mode-btn-express" onclick="setInspectionMode('express')">
+            ⚡ Express (1-Tap)
+          </button>
+          <button class="mode-segment-btn" id="mode-btn-audit" onclick="setInspectionMode('audit')">
+            📋 Full Audit Mode
+          </button>
+        </div>
+        <div class="sync-status-indicator" id="sync-status">
+          <span class="sync-dot"></span> ☁️ Offline Local Storage
+        </div>
+      </div>
+      
+      <!-- Scrollable Inspection Workspace -->
+      <section class="app-workspace">
+        
+        <!-- Top Room Navigation Pills Strip -->
+        <div class="top-room-selector-bar" id="top-room-selector-bar">
+          <!-- Room pills loaded dynamically via app.js -->
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; margin-top: 10px;">
+          <h2 class="workspace-title" id="workspace-view-title" style="margin-bottom: 0;">Walkpath Movement Checklist</h2>
+          <button class="btn btn-primary" onclick="downloadPdfReport()" style="padding: 8px 16px; font-size: 0.8rem; border-radius: 20px; background-color: var(--bg-sidebar); box-shadow: none;">
+            💾 Save PDF Report
+          </button>
+        </div>
+        
+        <!-- Checklist Containers -->
+        <div id="accordions-grid-container">
+          <!-- Accordions/stages/grids dynamically loaded by app.js -->
+        </div>
+
+        <!-- Simulated AI Vision Object Detection Confirmation Panel -->
+        <div class="ai-vision-panel" id="ai-vision-scanner">
+          <div class="ai-panel-header">
+            <h4>👁️ Future AI Vision Assistant (Simulated Walkthrough)</h4>
+            <span class="badge-ai">Beta</span>
+          </div>
+          
+          <div class="ai-viewport-row">
+            <!-- Simulated Video Feed Viewport -->
+            <div class="ai-video-feed" id="ai-feed-box">
+              <div class="ai-crosshair"></div>
+              
+              <!-- Dynamic Target Box Overlay (AI Detections) -->
+              <div class="ai-target-box" id="ai-overlay-box" style="display: none;">
+                <div class="ai-box-label" id="ai-overlay-label">Switchboard [98%]</div>
+              </div>
+              
+              <!-- Simulated Static Overlay Text -->
+              <div class="ai-feed-status">📹 Live Video Stream Walkthrough Simulation</div>
+              <div class="ai-feed-instructions" id="ai-feed-text">Tether video to automatically inspect assets...</div>
+            </div>
+            
+            <!-- AI Detections Console -->
+            <div class="ai-controls-console">
+              <p style="font-size:0.75rem; color:var(--text-secondary); line-height:1.45; margin-bottom:12px;">
+                Record a video sweep of the room. The local AI will detect fixtures and overlay bounding boxes to automatically identify components and flag defects.
+              </p>
+              
+              <div class="ai-alert-banner" id="ai-alert-box" style="display: none;">
+                <div class="ai-alert-title">⚠️ AI DEFECT DETECTED</div>
+                <div class="ai-alert-desc" id="ai-alert-text">Cracked Switchboard plate face [94% confidence]</div>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                  <button class="btn btn-primary btn-sm" id="btn-ai-confirm" style="padding:4px 10px; font-size:0.7rem; background-color:var(--success); border-color:var(--success);">Confirm & Flag</button>
+                  <button class="btn btn-secondary btn-sm" id="btn-ai-dismiss" style="padding:4px 10px; font-size:0.7rem;">Dismiss</button>
+                </div>
+              </div>
+              
+              <button class="btn btn-primary" id="btn-ai-simulate" style="width:100%; border-radius:10px; background-color:var(--bg-sidebar); border-color:var(--bg-sidebar); font-size:0.8rem; font-weight:bold;">
+                🎥 Simulate AI Video Sweep
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+    </main>
+    
+    <!-- Restored Bottom Wizard Categories Navigation Pill Bar -->
+    <nav class="bottom-nav-bar" id="wizard-bottom-navigation">
+      <!-- Injected dynamically by app.js -->
+    </nav>
+    
+  </div>
+
+  <!-- Dynamic Property Setup Configurator Drawer/Modal -->
+  <div class="modal-overlay" id="config-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">⚙️ Property Setup Configurator</h3>
+        <button class="modal-close" onclick="toggleConfigModal(false)">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+          Answer these property catalog configuration questions once to customize the routing checklist. Unchecking questions will instantly filter out matching items from all room lists.
+        </p>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <!-- 15 Routing Configuration Questions based on Excel map -->
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Air Conditioners</span>
+              <span class="config-q-desc">Does this property contain AC split/window units?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_ac" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Bathroom Geysers</span>
+              <span class="config-q-desc">Are there water heaters/geysers installed?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_geyser" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Windows</span>
+              <span class="config-q-desc">Do rooms contain glass or timber window enclosures?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_window" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Built-in Wardrobes</span>
+              <span class="config-q-desc">Does bedroom contain wardrobes / closets?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_wardrobe" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Water Purifier (RO)</span>
+              <span class="config-q-desc">Does kitchen contain an active RO filter?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_purifier" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Water Softener</span>
+              <span class="config-q-desc">Is there a primary water softener system on-site?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_softener" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Pressure Pump</span>
+              <span class="config-q-desc">Does property have an electrical booster pressure pump?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_pump" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Refrigerator Location</span>
+              <span class="config-q-desc">Is the refrigerator built-in or located in the kitchen?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_fridge" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Kitchen Chimney</span>
+              <span class="config-q-desc">Does the kitchen contain a ventilation chimney / hood?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_chimney" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Exhaust Fans</span>
+              <span class="config-q-desc">Are exhaust fans present in toilets / kitchen?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_exhaust" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Distribution Board Panel</span>
+              <span class="config-q-desc">Is the main DB panel visible in common spaces?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_db" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Outdoor Lighting</span>
+              <span class="config-q-desc">Are there lighting systems on balconies/compounds?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_outdoor_lights" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Outdoor Taps</span>
+              <span class="config-q-desc">Are there taps in gardens or utility balconies?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_outdoor_taps" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Balcony Glass Enclosure</span>
+              <span class="config-q-desc">Is the balcony enclosed with structural glazing/grills?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_balcony_enclosure" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-question-card">
+            <div class="config-q-left">
+              <span class="config-q-title">Pooja Room Mandir</span>
+              <span class="config-q-desc">Is the mandir structured of built-in woodwork?</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk_pooja_wood" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="toggleConfigModal(false)">Cancel</button>
+        <button class="btn btn-primary" onclick="savePropertyConfig()">Apply & Save Configuration</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Print-Only Layout Container -->
+  <div class="visible-print" id="print-report-container">
+    <!-- Injected dynamically when saving report -->
+  </div>
+
+  <!-- Excel Databases & Scripts -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
