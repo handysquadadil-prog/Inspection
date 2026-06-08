@@ -212,25 +212,33 @@
           <div class="ai-viewport-row">
             <!-- Simulated Video Feed Viewport -->
             <div class="ai-video-feed" id="ai-feed-box">
-              <div class="ai-crosshair"></div>
+              <!-- Live Video Stream element -->
+              <video id="ai-video-stream" autoplay playsinline muted style="display: none; width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1;"></video>
+              
+              <div class="ai-crosshair" style="z-index: 3;"></div>
               
               <!-- Dynamic Target Box Overlay (AI Detections) -->
-              <div class="ai-target-box" id="ai-overlay-box" style="display: none;">
+              <div class="ai-target-box" id="ai-overlay-box" style="display: none; z-index: 4;">
                 <div class="ai-box-label" id="ai-overlay-label">Switchboard [98%]</div>
               </div>
               
               <!-- Simulated Static Overlay Text -->
-              <div class="ai-feed-status">📹 Live Video Stream Walkthrough Simulation</div>
-              <div class="ai-feed-instructions" id="ai-feed-text">Tether video to automatically inspect assets...</div>
+              <div class="ai-feed-status" style="z-index: 5;">📹 Live Video Stream Walkthrough Simulation</div>
+              <div class="ai-feed-instructions" id="ai-feed-text" style="z-index: 5;">Tether video to automatically inspect assets...</div>
             </div>
             
             <!-- AI Detections Console -->
             <div class="ai-controls-console">
-              <p style="font-size:0.75rem; color:var(--text-secondary); line-height:1.45; margin-bottom:12px;">
+              <p style="font-size:0.75rem; color:var(--text-secondary); line-height:1.45; margin-bottom:8px;">
                 Record a video sweep of the room. The local AI will detect fixtures and overlay bounding boxes to automatically identify components and flag defects.
               </p>
               
-              <div class="ai-alert-banner" id="ai-alert-box" style="display: none;">
+              <!-- Developer Console Terminal -->
+              <div class="ai-terminal-console" id="ai-terminal-console">
+                <div class="terminal-line text-system">[System] AI Vision Assistant (Beta) ready. Click simulate/start below.</div>
+              </div>
+              
+              <div class="ai-alert-banner" id="ai-alert-box" style="display: none; margin-top: 8px;">
                 <div class="ai-alert-title">⚠️ AI DEFECT DETECTED</div>
                 <div class="ai-alert-desc" id="ai-alert-text">Cracked Switchboard plate face [94% confidence]</div>
                 <div style="display:flex; gap:8px; margin-top:8px;">
@@ -239,7 +247,7 @@
                 </div>
               </div>
               
-              <button class="btn btn-primary" id="btn-ai-simulate" style="width:100%; border-radius:10px; background-color:var(--bg-sidebar); border-color:var(--bg-sidebar); font-size:0.8rem; font-weight:bold;">
+              <button class="btn btn-primary" id="btn-ai-simulate" style="width:100%; border-radius:10px; background-color:var(--bg-sidebar); border-color:var(--bg-sidebar); font-size:0.8rem; font-weight:bold; margin-top: 8px;">
                 🎥 Simulate AI Video Sweep
               </button>
             </div>

@@ -719,6 +719,11 @@ function getRoomIcon(room) {
 
 // Active Room render
 function renderActiveRoom() {
+  if (typeof window.stopWebcamStream === 'function') {
+    window.stopWebcamStream();
+    window.clearAiSweepIntervals();
+  }
+  
   document.getElementById('banner-active-title').innerHTML = `${getRoomIcon(state.currentRoom)} ${state.currentRoom}`;
   
   let totalIssuesCount = 0;
@@ -2195,82 +2200,268 @@ function setupEventListeners() {
   }
 }
 
+// Global/window variables to track camera stream and timeouts
+window.aiStream = null;
+window.aiAnimationInterval = null;
+window.aiSweepTimeouts = [];
+
+window.logToAiConsole = function(type, msg) {
+  const consoleEl = document.getElementById('ai-terminal-console');
+  if (!consoleEl) return;
+  const timeStr = new Date().toTimeString().split(' ')[0] + '.' + String(new Date().getMilliseconds()).padStart(3, '0');
+  const lineEl = document.createElement('div');
+  lineEl.className = `terminal-line text-${type}`;
+  lineEl.innerText = `[${timeStr}] [${type.toUpperCase()}] ${msg}`;
+  consoleEl.appendChild(lineEl);
+  // Auto-scroll to bottom
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+};
+
+window.stopWebcamStream = function() {
+  if (window.aiStream) {
+    const tracks = window.aiStream.getTracks();
+    tracks.forEach(track => track.stop());
+    window.aiStream = null;
+    window.logToAiConsole('system', 'Camera stream stopped and tracks released.');
+  }
+  const videoEl = document.getElementById('ai-video-stream');
+  if (videoEl) {
+    videoEl.srcObject = null;
+    videoEl.style.display = 'none';
+  }
+};
+
+window.clearAiSweepIntervals = function() {
+  if (window.aiAnimationInterval) {
+    clearInterval(window.aiAnimationInterval);
+    window.aiAnimationInterval = null;
+  }
+  if (window.aiSweepTimeouts) {
+    window.aiSweepTimeouts.forEach(t => clearTimeout(t));
+    window.aiSweepTimeouts = [];
+  }
+};
+
+window.animateOverlayBox = function(targetX, targetY, targetW, targetH, durationMs) {
+  const overlayBox = document.getElementById('ai-overlay-box');
+  if (!overlayBox) return;
+  
+  overlayBox.style.display = 'block';
+  const startTime = performance.now();
+  
+  const startX = parseFloat(overlayBox.style.left) || 20;
+  const startY = parseFloat(overlayBox.style.top) || 20;
+  const startW = parseFloat(overlayBox.style.width) || 60;
+  const startH = parseFloat(overlayBox.style.height) || 60;
+  
+  if (window.aiAnimationInterval) {
+    clearInterval(window.aiAnimationInterval);
+  }
+  
+  window.aiAnimationInterval = setInterval(() => {
+    const elapsed = performance.now() - startTime;
+    const progress = Math.min(elapsed / durationMs, 1);
+    
+    // easeOutQuad
+    const ease = progress * (2 - progress);
+    
+    const currX = startX + (targetX - startX) * ease;
+    const currY = startY + (targetY - startY) * ease;
+    const currW = startW + (targetW - startW) * ease;
+    const currH = startH + (targetH - startH) * ease;
+    
+    overlayBox.style.left = `${currX}px`;
+    overlayBox.style.top = `${currY}px`;
+    overlayBox.style.width = `${currW}px`;
+    overlayBox.style.height = `${currH}px`;
+    
+    if (progress >= 1) {
+      clearInterval(window.aiAnimationInterval);
+    }
+  }, 16);
+};
+
 // AI Vision Sweep Walkpath Simulation
 window.simulateAiVisionSweep = function() {
+  window.stopWebcamStream();
+  window.clearAiSweepIntervals();
+  
   const feedText = document.getElementById('ai-feed-text');
   const overlayBox = document.getElementById('ai-overlay-box');
   const overlayLabel = document.getElementById('ai-overlay-label');
   const alertBox = document.getElementById('ai-alert-box');
   const alertText = document.getElementById('ai-alert-text');
+  const videoEl = document.getElementById('ai-video-stream');
   
   if (!feedText || !overlayBox || !overlayLabel || !alertBox || !alertText) return;
   
   alertBox.style.display = 'none';
   overlayBox.style.display = 'none';
   
+  // Clear developer console
+  const consoleEl = document.getElementById('ai-terminal-console');
+  if (consoleEl) consoleEl.innerHTML = '';
+  
+  window.logToAiConsole('system', 'Requesting hardware camera access (facingMode: environment)...');
   feedText.innerText = "🎥 Initializing camera sweep walkthrough...";
   
-  setTimeout(() => {
-    feedText.innerText = "🔍 Scanning room assets in clockwise walkthrough...";
-    overlayBox.style.top = '30px';
-    overlayBox.style.left = '40px';
-    overlayBox.style.width = '120px';
-    overlayBox.style.height = '100px';
-    overlayBox.style.display = 'block';
-    overlayBox.style.borderColor = '#10b981';
-    overlayBox.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+  // Try to stream environment camera
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(stream => {
+      startScannerStream(stream);
+    })
+    .catch(err => {
+      window.logToAiConsole('warning', 'Rear environment camera not found or failed. Trying standard camera...');
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          startScannerStream(stream);
+        })
+        .catch(err2 => {
+          window.logToAiConsole('error', 'Webcam permission denied/unavailable. Swapped to simulated walkthrough fallback.');
+          runFallbackSimulation();
+        });
+    });
     
+  function startScannerStream(stream) {
+    window.aiStream = stream;
+    if (videoEl) {
+      videoEl.srcObject = stream;
+      videoEl.style.display = 'block';
+    }
+    window.logToAiConsole('system', 'Camera stream active. Resolving video dimensions...');
+    runDetectionSequence(true);
+  }
+  
+  function runFallbackSimulation() {
+    if (videoEl) videoEl.style.display = 'none';
+    window.logToAiConsole('system', 'Initiating simulated scan pattern...');
+    runDetectionSequence(false);
+  }
+  
+  function runDetectionSequence(hasCamera) {
+    // Stage 1: Calibration (0s to 1.5s)
+    window.logToAiConsole('system', 'Visual calibration initiated. Running lighting auto-balance...');
+    if (hasCamera) {
+      window.logToAiConsole('system', 'RGB frame buffer bound. Hardware acceleration: ENABLED.');
+    }
+    
+    // Set up active room asset targets
     let targetAsset = "Light Fixture";
+    let targetCategory = "Electrical";
+    let issueText = "Bulb / LED tube fused or not glowing";
     let confidence = "92%";
+    let defectDesc = "Flickering LED tube/driver fault detected [90%]";
+    
     if (state.currentRoom.includes('Living') || state.currentRoom.includes('Hall')) {
       targetAsset = "Switchboard";
+      targetCategory = "Electrical";
+      issueText = "Cracked or broken front switch plate face";
+      defectDesc = "Cracked front switch plate face [94%]";
+      confidence = "98%";
     } else if (state.currentRoom.includes('Bathroom')) {
       targetAsset = "WC / Toilet";
+      targetCategory = "Plumbing";
+      issueText = "Continuous running / cistern leak";
+      defectDesc = "Continuous water running / flush leakage [91%]";
+      confidence = "95%";
     } else if (state.currentRoom.includes('Kitchen')) {
       targetAsset = "Kitchen Chimney";
-    }
-    
-    overlayLabel.innerText = `${targetAsset} [${confidence}]`;
-    overlayLabel.style.backgroundColor = '#10b981';
-  }, 1000);
-  
-  setTimeout(() => {
-    feedText.innerText = "⚠️ Defect identified! Evaluating anomaly details...";
-    overlayBox.style.borderColor = '#ef4444';
-    overlayBox.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-    overlayLabel.style.backgroundColor = '#ef4444';
-    
-    let defectDesc = "Flickering LED tube/driver fault detected [90%]";
-    if (state.currentRoom.includes('Living') || state.currentRoom.includes('Hall')) {
-      defectDesc = "Cracked front switch plate face [94%]";
-    } else if (state.currentRoom.includes('Bathroom')) {
-      defectDesc = "Continuous water running / flush leakage [91%]";
-    } else if (state.currentRoom.includes('Kitchen')) {
+      targetCategory = "AC & Appliances";
+      issueText = "Baffle filters choked with heavy grease";
       defectDesc = "Baffle filter heavily choked with grease [88%]";
+      confidence = "93%";
+    } else if (state.currentRoom.includes('Bedroom')) {
+      targetAsset = "Built-in Wardrobe";
+      targetCategory = "Carpentry";
+      issueText = "Hinges loose / alignment issue";
+      defectDesc = "Wardrobe shutter misalignment & loose hinges [89%]";
+      confidence = "91%";
+    } else if (state.currentRoom.includes('Balcony')) {
+      targetAsset = "Balcony Tiles";
+      targetCategory = "Civil & Finishes";
+      issueText = "Hollow sound on tapping / loose tiles";
+      defectDesc = "Cracked or hollow sounding floor tiles [87%]";
+      confidence = "89%";
     }
     
-    alertText.innerText = defectDesc;
-    alertBox.style.display = 'block';
-  }, 2500);
+    // Animate box floating around finding things
+    overlayBox.style.left = '20px';
+    overlayBox.style.top = '20px';
+    overlayBox.style.width = '60px';
+    overlayBox.style.height = '60px';
+    overlayBox.style.borderColor = '#3b82f6'; // blue scanning
+    overlayBox.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+    overlayLabel.innerText = "SCANNING...";
+    overlayLabel.style.backgroundColor = '#3b82f6';
+    
+    window.animateOverlayBox(80, 40, 120, 100, 1200);
+    
+    // Timeout 1: (1.5 seconds) - Detect fixture
+    const t1 = setTimeout(() => {
+      feedText.innerText = `🔍 Scanning room assets: ${targetAsset} identified.`;
+      window.logToAiConsole('ai', `Detected bounding anchor: ${targetAsset} [${confidence} confidence]`);
+      window.logToAiConsole('system', `Querying database master templates for standard compliance...`);
+      
+      overlayBox.style.borderColor = '#10b981'; // green detection
+      overlayBox.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+      overlayLabel.innerText = `${targetAsset} [${confidence}]`;
+      overlayLabel.style.backgroundColor = '#10b981';
+      
+      // Keep animating box to focus closer
+      window.animateOverlayBox(60, 30, 150, 110, 1200);
+    }, 1500);
+    window.aiSweepTimeouts.push(t1);
+    
+    // Timeout 2: (3.0 seconds) - Defect evaluation
+    const t2 = setTimeout(() => {
+      feedText.innerText = "⚠️ Defect identified! Evaluating anomaly details...";
+      window.logToAiConsole('warning', `Anomaly matched against issue master database!`);
+      window.logToAiConsole('ai', `Defect classification: ${defectDesc}`);
+      window.logToAiConsole('system', `Action payload generated. Prompting inspector for approval...`);
+      
+      overlayBox.style.borderColor = '#ef4444'; // red warning
+      overlayBox.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+      overlayLabel.innerText = `⚠️ DEFECT: ${confidence}`;
+      overlayLabel.style.backgroundColor = '#ef4444';
+      
+      alertText.innerText = defectDesc;
+      alertBox.style.display = 'block';
+    }, 3000);
+    window.aiSweepTimeouts.push(t2);
+  }
 };
 
 window.confirmAiDefect = function() {
   let targetAsset = "Light Fixture";
   let targetCategory = "Electrical";
   let issueText = "Bulb / LED tube fused or not glowing";
+  let confidence = "92%";
   
   if (state.currentRoom.includes('Living') || state.currentRoom.includes('Hall')) {
     targetAsset = "Switchboard";
     targetCategory = "Electrical";
     issueText = "Cracked or broken front switch plate face";
+    confidence = "98%";
   } else if (state.currentRoom.includes('Bathroom')) {
     targetAsset = "WC / Toilet";
     targetCategory = "Plumbing";
     issueText = "Continuous running / cistern leak";
+    confidence = "95%";
   } else if (state.currentRoom.includes('Kitchen')) {
     targetAsset = "Kitchen Chimney";
     targetCategory = "AC & Appliances";
     issueText = "Baffle filters choked with heavy grease";
+    confidence = "93%";
+  } else if (state.currentRoom.includes('Bedroom')) {
+    targetAsset = "Built-in Wardrobe";
+    targetCategory = "Carpentry";
+    issueText = "Hinges loose / alignment issue";
+    confidence = "91%";
+  } else if (state.currentRoom.includes('Balcony')) {
+    targetAsset = "Balcony Tiles";
+    targetCategory = "Civil & Finishes";
+    issueText = "Hollow sound on tapping / loose tiles";
+    confidence = "89%";
   }
   
   let matchKey = null;
@@ -2288,6 +2479,17 @@ window.confirmAiDefect = function() {
     });
   });
   
+  // Custom room fallback check if not found directly
+  if (!matchKey) {
+    // Find the first component in the active room matching targetCategory
+    const comps = getComponentsForRoom(state.currentRoom, targetCategory);
+    if (comps && comps.length > 0) {
+      matchKey = `${state.currentRoom}::${targetCategory}::${comps[0].name}`;
+      matchCat = targetCategory;
+      matchCompName = comps[0].name;
+    }
+  }
+  
   if (matchKey && state.checkpointStates[matchKey]) {
     const record = state.checkpointStates[matchKey];
     record.status = 'major';
@@ -2298,45 +2500,133 @@ window.confirmAiDefect = function() {
     
     record.notes = `AI Vision Sweep Defect Auto-Detected: ${issueText}`;
     
+    // Canvas capturing video frame or drawing mock diagnostic UI
+    const videoEl = document.getElementById('ai-video-stream');
+    const overlayBox = document.getElementById('ai-overlay-box');
+    
     const canvas = document.createElement('canvas');
-    canvas.width = 300;
-    canvas.height = 200;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#050b1d';
-    ctx.fillRect(0, 0, 300, 200);
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(40, 30, 220, 140);
-    ctx.fillStyle = '#ef4444';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.fillText(`AI VISION DETECTED DEFECT`, 50, 50);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '9px sans-serif';
-    ctx.fillText(`Component: ${matchCompName}`, 50, 75);
-    ctx.fillText(`Anomaly: ${issueText}`, 50, 95);
-    ctx.fillText(`Confidence: 94%`, 50, 115);
+    
+    let useCameraFrame = false;
+    if (window.aiStream && videoEl && videoEl.readyState >= 2) {
+      const width = videoEl.videoWidth || 640;
+      const height = videoEl.videoHeight || 480;
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Draw camera image
+      ctx.drawImage(videoEl, 0, 0, width, height);
+      useCameraFrame = true;
+      
+      const feedBox = document.getElementById('ai-feed-box');
+      if (feedBox && overlayBox) {
+        const feedRect = feedBox.getBoundingClientRect();
+        const boxRect = overlayBox.getBoundingClientRect();
+        
+        const scaleX = width / feedRect.width;
+        const scaleY = height / feedRect.height;
+        
+        const drawX = (boxRect.left - feedRect.left) * scaleX;
+        const drawY = (boxRect.top - feedRect.top) * scaleY;
+        const drawW = boxRect.width * scaleX;
+        const drawH = boxRect.height * scaleY;
+        
+        // Red Bounding Box on Snapshot
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = Math.max(3, Math.round(width / 150));
+        ctx.strokeRect(drawX, drawY, drawW, drawH);
+        
+        // Defect banner
+        ctx.fillStyle = '#ef4444';
+        const labelHeight = Math.max(20, Math.round(height / 20));
+        const labelY = Math.max(0, drawY - labelHeight);
+        ctx.fillRect(drawX, labelY, drawW, labelHeight);
+        
+        ctx.fillStyle = '#ffffff';
+        const fontSize = Math.max(10, Math.round(height / 25));
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.fillText(`⚠️ AI ANOMALY: ${targetAsset}`, drawX + 6, labelY + fontSize * 0.8);
+      }
+    }
+    
+    if (!useCameraFrame) {
+      canvas.width = 400;
+      canvas.height = 300;
+      
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, 400, 300);
+      
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < 400; x += 20) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, 300);
+        ctx.stroke();
+      }
+      for (let y = 0; y < 300; y += 20) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(400, y);
+        ctx.stroke();
+      }
+      
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)';
+      ctx.beginPath();
+      ctx.arc(200, 150, 100, 0, 2 * Math.PI);
+      ctx.stroke();
+      
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(60, 50, 280, 180);
+      
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(60, 20, 280, 30);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(`⚠️ AI DEFECT: ${targetAsset.toUpperCase()}`, 70, 40);
+      
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '11px monospace';
+      ctx.fillText(`ROOM: ${state.currentRoom.toUpperCase()}`, 80, 90);
+      ctx.fillText(`CATEGORY: ${targetCategory.toUpperCase()}`, 80, 115);
+      ctx.fillText(`CLASSIFICATION: ${issueText}`, 80, 140);
+      ctx.fillText(`CONFIDENCE RATE: ${confidence}`, 80, 165);
+      ctx.fillText(`RESOLUTION STATUS: UNRESOLVED`, 80, 190);
+      
+      ctx.fillStyle = '#ef4444';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText(`[TRACKING SCAN ERROR]`, 80, 215);
+    }
     
     const photoUrl = canvas.toDataURL('image/jpeg');
     record.photos.push(photoUrl);
     
-    state.activeCategory = matchCat; // Ensure the active category filter switches to show the newly flagged asset!
+    state.activeCategory = matchCat;
     state.expandedCategories[matchCat] = true;
     state.expandedDrawers[matchKey] = true;
+    
+    window.stopWebcamStream();
+    window.clearAiSweepIntervals();
     
     renderActiveRoom();
     renderSidebar();
     
     alert(`AI defect confirmed for ${matchCompName}! Asset status updated to Major Issue.`);
   }
-  
-  dismissAiDefect();
 };
 
 window.dismissAiDefect = function() {
   const alertBox = document.getElementById('ai-alert-box');
   const overlayBox = document.getElementById('ai-overlay-box');
   const feedText = document.getElementById('ai-feed-text');
+  
   if (alertBox) alertBox.style.display = 'none';
   if (overlayBox) overlayBox.style.display = 'none';
   if (feedText) feedText.innerText = "📹 Live Video Stream Walkthrough Simulation";
+  
+  window.stopWebcamStream();
+  window.clearAiSweepIntervals();
+  
+  window.logToAiConsole('system', 'AI scan sweep halted/reset.');
 };

@@ -1706,6 +1706,57 @@ input:checked + .slider:before {
   justify-content: space-between;
 }
 
+.ai-terminal-console {
+  background-color: #030712;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  height: 110px;
+  overflow-y: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.7rem;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Custom scrollbar for terminal */
+.ai-terminal-console::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-terminal-console::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+.ai-terminal-console::-webkit-scrollbar-thumb {
+  background: rgba(52, 211, 153, 0.3);
+  border-radius: 2px;
+}
+.ai-terminal-console::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 211, 153, 0.6);
+}
+
+.terminal-line {
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.terminal-line.text-system {
+  color: #60a5fa; /* light blue */
+}
+
+.terminal-line.text-ai {
+  color: #34d399; /* emerald green */
+}
+
+.terminal-line.text-warning {
+  color: #fbbf24; /* yellow */
+}
+
+.terminal-line.text-error {
+  color: #f87171; /* light red */
+}
+
 .ai-alert-banner {
   background-color: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.3);
