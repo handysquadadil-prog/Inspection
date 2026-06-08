@@ -2357,44 +2357,52 @@ window.simulateAiVisionSweep = function() {
       window.logToAiConsole('system', 'RGB frame buffer bound. Hardware acceleration: ENABLED.');
     }
     
-    // Set up active room asset targets
-    let targetAsset = "Light Fixture";
-    let targetCategory = "Electrical";
-    let issueText = "Bulb / LED tube fused or not glowing";
-    let confidence = "92%";
-    let defectDesc = "Flickering LED tube/driver fault detected [90%]";
+    // Find active components in the current room and category
+    let targetComponent = null;
+    let targetCategory = null;
     
-    if (state.currentRoom.includes('Living') || state.currentRoom.includes('Hall')) {
-      targetAsset = "Switchboard";
-      targetCategory = "Electrical";
-      issueText = "Cracked or broken front switch plate face";
-      defectDesc = "Cracked front switch plate face [94%]";
-      confidence = "98%";
-    } else if (state.currentRoom.includes('Bathroom')) {
-      targetAsset = "WC / Toilet";
-      targetCategory = "Plumbing";
-      issueText = "Continuous running / cistern leak";
-      defectDesc = "Continuous water running / flush leakage [91%]";
-      confidence = "95%";
-    } else if (state.currentRoom.includes('Kitchen')) {
-      targetAsset = "Kitchen Chimney";
-      targetCategory = "AC & Appliances";
-      issueText = "Baffle filters choked with heavy grease";
-      defectDesc = "Baffle filter heavily choked with grease [88%]";
-      confidence = "93%";
-    } else if (state.currentRoom.includes('Bedroom')) {
-      targetAsset = "Built-in Wardrobe";
-      targetCategory = "Carpentry";
-      issueText = "Hinges loose / alignment issue";
-      defectDesc = "Wardrobe shutter misalignment & loose hinges [89%]";
-      confidence = "91%";
-    } else if (state.currentRoom.includes('Balcony')) {
-      targetAsset = "Balcony Tiles";
-      targetCategory = "Civil & Finishes";
-      issueText = "Hollow sound on tapping / loose tiles";
-      defectDesc = "Cracked or hollow sounding floor tiles [87%]";
-      confidence = "89%";
+    if (state.activeCategory === 'all') {
+      for (let cat of categoriesList) {
+        const comps = getComponentsForRoom(state.currentRoom, cat);
+        if (comps && comps.length > 0) {
+          targetComponent = comps[0];
+          targetCategory = cat;
+          break;
+        }
+      }
+    } else {
+      const comps = getComponentsForRoom(state.currentRoom, state.activeCategory);
+      if (comps && comps.length > 0) {
+        targetComponent = comps[0];
+        targetCategory = state.activeCategory;
+      }
     }
+    
+    // Abort if no inspectable assets are in the current room/category checklist
+    if (!targetComponent || !targetCategory) {
+      window.logToAiConsole('error', 'Scan aborted: No active components found in this category/room layout.');
+      feedText.innerText = "❌ No active components in this view configuration.";
+      window.stopWebcamStream();
+      window.clearAiSweepIntervals();
+      return;
+    }
+    
+    const targetAsset = targetComponent.name;
+    const issueText = (targetComponent.issues && targetComponent.issues.length > 0) ? 
+      targetComponent.issues[0] : "General defect or wear identified";
+      
+    // Generate semi-random high confidence rate
+    const confRate = 88 + Math.floor(Math.random() * 11); // 88% - 98%
+    const confidence = `${confRate}%`;
+    const defectDesc = `${issueText} [${confidence} confidence]`;
+    
+    // Store in global window state so confirmAiDefect accesses the exact scanned asset
+    window.aiDetectedComponent = targetAsset;
+    window.aiDetectedCategory = targetCategory;
+    window.aiDetectedIssue = issueText;
+    window.aiDetectedConfidence = confidence;
+    
+    window.logToAiConsole('system', `Target locked: Scanning checklist item '${targetAsset}'...`);
     
     // Animate box floating around finding things
     overlayBox.style.left = '20px';
@@ -2411,7 +2419,7 @@ window.simulateAiVisionSweep = function() {
     // Timeout 1: (1.5 seconds) - Detect fixture
     const t1 = setTimeout(() => {
       feedText.innerText = `🔍 Scanning room assets: ${targetAsset} identified.`;
-      window.logToAiConsole('ai', `Detected bounding anchor: ${targetAsset} [${confidence} confidence]`);
+      window.logToAiConsole('ai', `Detected bounding anchor: ${targetAsset} [${confidence}]`);
       window.logToAiConsole('system', `Querying database master templates for standard compliance...`);
       
       overlayBox.style.borderColor = '#10b981'; // green detection
@@ -2444,64 +2452,21 @@ window.simulateAiVisionSweep = function() {
 };
 
 window.confirmAiDefect = function() {
-  let targetAsset = "Light Fixture";
-  let targetCategory = "Electrical";
-  let issueText = "Bulb / LED tube fused or not glowing";
-  let confidence = "92%";
+  const targetAsset = window.aiDetectedComponent;
+  const targetCategory = window.aiDetectedCategory;
+  const issueText = window.aiDetectedIssue;
+  const confidence = window.aiDetectedConfidence || "94%";
   
-  if (state.currentRoom.includes('Living') || state.currentRoom.includes('Hall')) {
-    targetAsset = "Switchboard";
-    targetCategory = "Electrical";
-    issueText = "Cracked or broken front switch plate face";
-    confidence = "98%";
-  } else if (state.currentRoom.includes('Bathroom')) {
-    targetAsset = "WC / Toilet";
-    targetCategory = "Plumbing";
-    issueText = "Continuous running / cistern leak";
-    confidence = "95%";
-  } else if (state.currentRoom.includes('Kitchen')) {
-    targetAsset = "Kitchen Chimney";
-    targetCategory = "AC & Appliances";
-    issueText = "Baffle filters choked with heavy grease";
-    confidence = "93%";
-  } else if (state.currentRoom.includes('Bedroom')) {
-    targetAsset = "Built-in Wardrobe";
-    targetCategory = "Carpentry";
-    issueText = "Hinges loose / alignment issue";
-    confidence = "91%";
-  } else if (state.currentRoom.includes('Balcony')) {
-    targetAsset = "Balcony Tiles";
-    targetCategory = "Civil & Finishes";
-    issueText = "Hollow sound on tapping / loose tiles";
-    confidence = "89%";
+  if (!targetAsset || !targetCategory || !issueText) {
+    alert("No active AI detection to confirm.");
+    return;
   }
   
-  let matchKey = null;
-  let matchCat = null;
-  let matchCompName = null;
+  let matchKey = `${state.currentRoom}::${targetCategory}::${targetAsset}`;
+  let matchCat = targetCategory;
+  let matchCompName = targetAsset;
   
-  categoriesList.forEach(c => {
-    const comps = getComponentsForRoom(state.currentRoom, c);
-    comps.forEach(cp => {
-      if (cp.name.toLowerCase().includes(targetAsset.toLowerCase().split(' ')[0])) {
-        matchKey = `${state.currentRoom}::${c}::${cp.name}`;
-        matchCat = c;
-        matchCompName = cp.name;
-      }
-    });
-  });
-  
-  // Custom room fallback check if not found directly
-  if (!matchKey) {
-    // Find the first component in the active room matching targetCategory
-    const comps = getComponentsForRoom(state.currentRoom, targetCategory);
-    if (comps && comps.length > 0) {
-      matchKey = `${state.currentRoom}::${targetCategory}::${comps[0].name}`;
-      matchCat = targetCategory;
-      matchCompName = comps[0].name;
-    }
-  }
-  
+  // Verify component exists in checklist state
   if (matchKey && state.checkpointStates[matchKey]) {
     const record = state.checkpointStates[matchKey];
     record.status = 'major';
