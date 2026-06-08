@@ -2312,13 +2312,14 @@ window.simulateAiVisionSweep = function() {
       startScannerStream(stream);
     })
     .catch(err => {
-      window.logToAiConsole('warning', 'Rear environment camera not found or failed. Trying standard camera...');
+      window.logToAiConsole('warning', `Rear camera unavailable (${err.name}: ${err.message}). Trying standard camera...`);
       navigator.mediaDevices.getUserMedia({ video: true })
         .then(stream => {
           startScannerStream(stream);
         })
         .catch(err2 => {
-          window.logToAiConsole('error', 'Webcam permission denied/unavailable. Swapped to simulated walkthrough fallback.');
+          window.logToAiConsole('error', `Camera access blocked (${err2.name}: ${err2.message})`);
+          window.logToAiConsole('system', 'Swapping to simulated walkthrough fallback.');
           runFallbackSimulation();
         });
     });
@@ -2326,8 +2327,18 @@ window.simulateAiVisionSweep = function() {
   function startScannerStream(stream) {
     window.aiStream = stream;
     if (videoEl) {
-      videoEl.srcObject = stream;
       videoEl.style.display = 'block';
+      videoEl.setAttribute('playsinline', 'true');
+      videoEl.setAttribute('autoplay', 'true');
+      videoEl.setAttribute('muted', 'true');
+      videoEl.srcObject = stream;
+      
+      // Explicitly trigger play to bypass mobile browser autoplay blocks
+      videoEl.play().then(() => {
+        window.logToAiConsole('system', 'Camera playback started successfully.');
+      }).catch(playErr => {
+        window.logToAiConsole('warning', `Autoplay pending user action: ${playErr.message}`);
+      });
     }
     window.logToAiConsole('system', 'Camera stream active. Resolving video dimensions...');
     runDetectionSequence(true);
