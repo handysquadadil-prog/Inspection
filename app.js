@@ -6,6 +6,7 @@ const state = {
   activeMode: 'field', // Redesign: Default to room-centric Field Mode
   activeCategory: 'all', // Active category toggle filter ('all' or specific CategoryName)
   activeCategoryIndex: 0, // Default focus Category: Electrical (index 0) to scroll into view
+  trainingDataset: [], // Active learning dataset collection
   timerSeconds: 45 * 60,
   timerInterval: null,
   
@@ -2508,14 +2509,17 @@ window.confirmAiDefect = function() {
     const ctx = canvas.getContext('2d');
     
     let useCameraFrame = false;
+    let drawX = 60, drawY = 50, drawW = 280, drawH = 180;
+    let imgWidth = 400, imgHeight = 300;
+    
     if (window.aiStream && videoEl && videoEl.readyState >= 2) {
-      const width = videoEl.videoWidth || 640;
-      const height = videoEl.videoHeight || 480;
-      canvas.width = width;
-      canvas.height = height;
+      imgWidth = videoEl.videoWidth || 640;
+      imgHeight = videoEl.videoHeight || 480;
+      canvas.width = imgWidth;
+      canvas.height = imgHeight;
       
       // Draw camera image
-      ctx.drawImage(videoEl, 0, 0, width, height);
+      ctx.drawImage(videoEl, 0, 0, imgWidth, imgHeight);
       useCameraFrame = true;
       
       const feedBox = document.getElementById('ai-feed-box');
@@ -2523,27 +2527,27 @@ window.confirmAiDefect = function() {
         const feedRect = feedBox.getBoundingClientRect();
         const boxRect = overlayBox.getBoundingClientRect();
         
-        const scaleX = width / feedRect.width;
-        const scaleY = height / feedRect.height;
+        const scaleX = imgWidth / feedRect.width;
+        const scaleY = imgHeight / feedRect.height;
         
-        const drawX = (boxRect.left - feedRect.left) * scaleX;
-        const drawY = (boxRect.top - feedRect.top) * scaleY;
-        const drawW = boxRect.width * scaleX;
-        const drawH = boxRect.height * scaleY;
+        drawX = (boxRect.left - feedRect.left) * scaleX;
+        drawY = (boxRect.top - feedRect.top) * scaleY;
+        drawW = boxRect.width * scaleX;
+        drawH = boxRect.height * scaleY;
         
         // Red Bounding Box on Snapshot
         ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = Math.max(3, Math.round(width / 150));
+        ctx.lineWidth = Math.max(3, Math.round(imgWidth / 150));
         ctx.strokeRect(drawX, drawY, drawW, drawH);
         
         // Defect banner
         ctx.fillStyle = '#ef4444';
-        const labelHeight = Math.max(20, Math.round(height / 20));
+        const labelHeight = Math.max(20, Math.round(imgHeight / 20));
         const labelY = Math.max(0, drawY - labelHeight);
         ctx.fillRect(drawX, labelY, drawW, labelHeight);
         
         ctx.fillStyle = '#ffffff';
-        const fontSize = Math.max(10, Math.round(height / 25));
+        const fontSize = Math.max(10, Math.round(imgHeight / 25));
         ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.fillText(`⚠️ AI ANOMALY: ${targetAsset}`, drawX + 6, labelY + fontSize * 0.8);
       }
@@ -2602,6 +2606,35 @@ window.confirmAiDefect = function() {
     const photoUrl = canvas.toDataURL('image/jpeg');
     record.photos.push(photoUrl);
     
+    // Save to trainingDataset collector for Active Learning
+    let yoloClass = 0;
+    const lowerAsset = targetAsset.toLowerCase();
+    if (lowerAsset.includes("toilet") || lowerAsset.includes("wc")) yoloClass = 1;
+    else if (lowerAsset.includes("chimney")) yoloClass = 2;
+    else if (lowerAsset.includes("wardrobe")) yoloClass = 3;
+    else if (lowerAsset.includes("tile")) yoloClass = 4;
+    else if (lowerAsset.includes("light") || lowerAsset.includes("fixture")) yoloClass = 5;
+    
+    const cx = (drawX + drawW / 2.0) / imgWidth;
+    const cy = (drawY + drawH / 2.0) / imgHeight;
+    const bw = drawW / imgWidth;
+    const bh = drawH / imgHeight;
+    
+    state.trainingDataset.push({
+      fileName: `img_inspect_${Date.now()}`,
+      room: state.currentRoom,
+      asset: targetAsset,
+      defect: issueText,
+      image: photoUrl,
+      yolo: {
+        classId: yoloClass,
+        cx: parseFloat(cx.toFixed(6)),
+        cy: parseFloat(cy.toFixed(6)),
+        bw: parseFloat(bw.toFixed(6)),
+        bh: parseFloat(bh.toFixed(6))
+      }
+    });
+    
     state.activeCategory = matchCat;
     state.expandedCategories[matchCat] = true;
     state.expandedDrawers[matchKey] = true;
@@ -2629,4 +2662,70 @@ window.dismissAiDefect = function() {
   window.clearAiSweepIntervals();
   
   window.logToAiConsole('system', 'AI scan sweep halted/reset.');
+};
+
+window.exportAiDataset = function() {
+  if (!state.trainingDataset || state.trainingDataset.length === 0) {
+    alert("No training dataset frames collected yet! Run some camera sweeps and click 'Confirm & Flag' to log defects first.");
+    return;
+  }
+  
+  // Create a Python unpacker script
+  const pythonScript = `import os
+import json
+import base64
+
+# Dataset payload from Handy sQuad Inspections
+DATASET = ${JSON.stringify(state.trainingDataset)}
+
+print(f"Unpacking {len(DATASET)} training frames locally...")
+
+# Create target directories
+os.makedirs("dataset/images/train", exist_ok=True)
+os.makedirs("dataset/labels/train", exist_ok=True)
+
+for i, item in enumerate(DATASET):
+    file_name = item.get("fileName", f"frame_{i}")
+    img_data_url = item.get("image", "")
+    yolo = item.get("yolo", {})
+    
+    if "data:image/jpeg;base64," in img_data_url:
+        base64_str = img_data_url.split(",")[1]
+    else:
+        print(f"Skip frame {i}: Invalid image data url")
+        continue
+        
+    # Write image
+    img_path = f"dataset/images/train/{file_name}.jpg"
+    with open(img_path, "wb") as img_file:
+        img_file.write(base64.b64decode(base64_str))
+        
+    # Write YOLO label
+    label_path = f"dataset/labels/train/{file_name}.txt"
+    with open(label_path, "w") as lbl_file:
+        class_id = yolo.get("classId", 0)
+        cx = yolo.get("cx", 0.5)
+        cy = yolo.get("cy", 0.5)
+        bw = yolo.get("bw", 0.5)
+        bh = yolo.get("bh", 0.5)
+        lbl_file.write(f"{class_id} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}\\n")
+        
+    print(f" -> Unpacked {file_name}.jpg and corresponding YOLO annotation.")
+
+print("\\nSuccess! Your local dataset is ready under dataset/images/train/ and dataset/labels/train/")
+print("Now run 'python train.py' to train your custom AI!")
+`;
+
+  // Download the python script
+  const blob = new Blob([pythonScript], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "unpack_dataset.py";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  alert(`Successfully generated 'unpack_dataset.py' containing ${state.trainingDataset.length} annotated training frames! Save it in your project folder and run 'python unpack_dataset.py' to unpack.`);
 };
